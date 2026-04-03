@@ -1,0 +1,42 @@
+{
+  "goverment_and_orgs": {
+    "description": "Oficjalne raporty rządowe i organizacyjne",
+    "sources": [
+      "https://www.cecafe.com.br/en/publications/monthly-exports-report/",
+      "https://www.fas.usda.gov/data/commodities/coffee",
+      "https://federaciondecafeteros.org/static/main/index.html",
+      "https://www.vicofa.org.vn/en-us/"
+    ]
+  },
+  "market_data": {
+    "description": "Notowania giełdowe i analizy finansowe",
+    "sources": [
+      "https://www.theice.com/products/15/Coffee-C-Futures/data",
+      "https://www.investing.com/commodities/us-coffee-c",
+      "https://www.barchart.com/futures/quotes/KC*0/futures-prices",
+      "https://www.tradingview.com/symbols/ICEUS-KC1!/news/",
+      "https://www.reuters.com/markets/commodities/"
+    ]
+  },
+  "weather_agronomy": {
+    "description": "Pogoda i warunki upraw",
+    "sources": [
+      "https://www.accuweather.com/en/br/minas-gerais/weather-forecast",
+      "https://www.worldweather.cc/world-coffee-weather/",
+      "https://climatetempo.com.br/previsao-do-tempo/agronegocio/cafe"
+    ]
+  },
+  "logistics_and_ports": {
+    "description": "Transport i drożność portów",
+    "sources": [
+      "https://www.marinetraffic.com/en/ais/details/ports/1183/Brazil_port:SANTOS",
+      "https://datamarnews.com/category/noticias/coffee/",
+      "https://www.portodesantos.com.br/en/",
+      "https://saigonnewport.com.vn/en/article/maritime-news"
+    ]
+  },
+  "industry_news": {
+    "description": "Wiadomości branżowe",
+    "sources": ["https://www.gcrmag.com/news/", "https://comunicaffe.com/"]
+  }
+}

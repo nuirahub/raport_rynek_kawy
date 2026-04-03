@@ -1,0 +1,134 @@
+# https://jina.ai/
+# playwright
+# Gemini
+import os
+
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+load_dotenv()
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+
+def get_pdf_with_ai(url: str) -> str:
+    """
+    Get data with AI
+    """
+    PROMPT_TEMPLATE = f"""
+Act as a Senior Coffee Market Analyst specializing in global supply chains and Brazilian exports. 
+Your task is to provide a comprehensive, executive summary based on the provided text/image from the Cecafé report.
+
+### CONTEXT:
+The user is a green coffee trader. The goal is to identify market shifts that could affect prices in the next 30 days.
+
+### REQUIRED ANALYSIS SECTIONS:
+1. **Executive Summary**: A high-level overview of the current month's performance.
+2. **Volume Dynamics**: 
+   - Compare current month exports vs. previous year (YoY).
+   - Analyze the split between Arabica and Robusta (Conilon).
+3. **Logistics & Port Infrastructure**: 
+   - Identify any mentions of vessel delays (rollovers), container shortages, or congestion in the Port of Santos and Rio de Janeiro.
+4. **Market Destinations**: 
+   - Highlight significant growth or decline in key markets (USA, Germany, Belgium, China).
+5. **Sustainability & Specialty**: 
+   - Summarize the performance of certified and differentiated coffees.
+6. **Risk Assessment (Critical)**: 
+   - List 3 potential risks or opportunities derived from this data.
+
+### FORMATTING RULES:
+- Use Markdown (headers, bold text, bullet points).
+- If specific numbers/percentages are available, always include them.
+- If the data suggests a significant market shift (>5% change or logistics crisis), start the response with the tag: [MARKET_ALERT].
+
+### SOURCE DATA:
+{url}
+"""
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    response = model.generate_content(PROMPT_TEMPLATE)
+    return response.text
+
+
+def get_html_with_ai(url: str) -> str:
+    """
+    Get data with AI
+    """
+    PROMPT_TEMPLATE = f"""
+Act as a Senior Coffee Market Analyst specializing in global supply chains and Brazilian exports. 
+Your task is to provide a comprehensive, executive summary based on the provided text/image from the Cecafé report.
+
+### CONTEXT:
+The user is a green coffee trader. The goal is to identify market shifts that could affect prices in the next 30 days.
+
+### REQUIRED ANALYSIS SECTIONS:
+1. **Executive Summary**: A high-level overview of the current month's performance.
+2. **Volume Dynamics**: 
+   - Compare current month exports vs. previous year (YoY).
+   - Analyze the split between Arabica and Robusta (Conilon).
+3. **Logistics & Port Infrastructure**: 
+   - Identify any mentions of vessel delays (rollovers), container shortages, or congestion in the Port of Santos and Rio de Janeiro.
+4. **Market Destinations**: 
+   - Highlight significant growth or decline in key markets (USA, Germany, Belgium, China).
+5. **Sustainability & Specialty**: 
+   - Summarize the performance of certified and differentiated coffees.
+6. **Risk Assessment (Critical)**: 
+   - List 3 potential risks or opportunities derived from this data.
+
+### FORMATTING RULES:
+- Use Markdown (headers, bold text, bullet points).
+- If specific numbers/percentages are available, always include them.
+- If the data suggests a significant market shift (>5% change or logistics crisis), start the response with the tag: [MARKET_ALERT].
+
+### SOURCE DATA:
+{url}
+"""
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    response = model.generate_content(PROMPT_TEMPLATE)
+    return response.text
+
+
+def extract_article(url: str, type: str) -> str:
+    """
+    Extract article from a url
+    """
+    if type == "pdf":
+        scrapai = get_pdf_with_ai(url)
+    elif type == "html":
+        scrapai = get_html_with_ai(url)
+    else:
+        print(f"Błąd: Nieprawidłowy typ: {type}")
+        return None
+
+    return scrapai
+
+
+def scrape_for_report():
+    SYSTEM_PROMPT = f"""
+Act as a Coffee Market Data Architect. 
+Analyze the provided text/PDF inputs and extract key metrics into a strictly structured JSON.
+
+### CRITICAL RULES:
+1. OUTPUT ONLY VALID JSON. No prose, no explanations.
+2. If data for a field is missing, use null.
+3. Use the exact keys provided in the schema.
+4. Language: English for keys, Polish/English for content (as specified).
+
+### SCHEMA STRUCTURE:
+{
+        "report_metadata": {"date": "string", "source_count": "number"},
+  "market_indicators": {
+            "price_ny_ice": {"value": "number", "change_pct": "number"},
+    "internal_price_colombia": {"value": "number", "currency": "string"}
+  },
+  "logistics_alerts": [{
+            "port": "string", "status": "critical|stable|warning", "issue": "string"}],
+  "production_updates": [{"country": "string", "forecast_change": "string"}],
+  "trigger_alert": "boolean"
+}
+"""
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    response = model.generate_content(SYSTEM_PROMPT)
+    return response.text
