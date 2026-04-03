@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 import google.generativeai as genai
 
-from scrape import extract_article
+from scrape import extract_article, scrape_for_report
 
 # --- KONFIGURACJA ---
 GENAI_KEY = os.getenv("GEMINI_API_KEY")
@@ -114,7 +114,7 @@ class CoffeeScraper:
 # --- MAIN ---
 if __name__ == "__main__":
     scraper = CoffeeScraper("sources.json")
-    today_results = scraper.scrape_for_report()
+    today_results = scrape_for_report(scraper)
 
     today_filename = f"snapshot_{datetime.now().strftime('%Y%m%d')}.json"
     yesterday_filename = (

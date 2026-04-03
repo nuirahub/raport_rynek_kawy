@@ -104,7 +104,7 @@ def extract_article(url: str, type: str) -> str:
     return scrapai
 
 
-def scrape_for_report():
+def scrape_for_report(scraper) -> str:
     SYSTEM_PROMPT = f"""
 Act as a Coffee Market Data Architect. 
 Analyze the provided text/PDF inputs and extract key metrics into a strictly structured JSON.
@@ -129,6 +129,23 @@ Analyze the provided text/PDF inputs and extract key metrics into a strictly str
 }
 """
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-2.5-flash")
-    response = model.generate_content(SYSTEM_PROMPT)
+    #  model = genai.GenerativeModel(
+    #      model_name="gemini-3-flash",
+    #      system_instruction=SYSTEM_PROMPT
+    #  )
+    model = genai.GenerativeModel(
+        model_name="gemini-3-flash",
+        tools=[{"google_search": {}}],  # WŁĄCZENIE WYSZUKIWARKI
+        system_instruction=SYSTEM_PROMPT.format(urls=", ".join(urls_list)),
+    )
+
+    user_prompt = f"Extract data from these sources into the defined JSON schema: {collected_data_text}"
+
+    response = model.generate_content(
+        user_prompt,
+        generation_config={
+            "response_mime_type": "application/json",  # WYMUSZENIE JSON
+            "temperature": 0.1,
+        },
+    )
     return response.text
