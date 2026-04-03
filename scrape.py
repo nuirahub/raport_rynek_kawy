@@ -99,13 +99,33 @@ def extract_article(url: str, type: str) -> str:
         scrapai = get_html_with_ai(url)
     else:
         print(f"Błąd: Nieprawidłowy typ: {type}")
-        return None
+        return ""
 
     return scrapai
 
 
 def scrape_for_report(scraper) -> str:
-    SYSTEM_PROMPT = f"""
+    os.makedirs(scraper.DIR_INPUT, exist_ok=True)
+
+    urls_list: list[str] = []
+    for _category, details in scraper.sources.items():
+        if not isinstance(details, dict):
+            continue
+        for content_type in ("pdf", "html"):
+            urls = details.get(content_type)
+            if isinstance(urls, list):
+                urls_list.extend(urls)
+
+    #  full_data = scraper.scrape_all()
+    #  collected_data_text = json.dumps(full_data, ensure_ascii=False)
+    #  max_context = 100_000
+    #  if len(collected_data_text) > max_context:
+    #      collected_data_text = (
+    #          collected_data_text[:max_context] + "\n...[truncated for context limit]"
+    #      )
+
+    # Podwójne {{ }} — literały dla str.format; jedyny placeholder: {urls}
+    SYSTEM_PROMPT = """
 Act as a Coffee Market Data Architect. 
 Analyze the provided text/PDF inputs and extract key metrics into a strictly structured JSON.
 
@@ -116,30 +136,36 @@ Analyze the provided text/PDF inputs and extract key metrics into a strictly str
 4. Language: English for keys, Polish/English for content (as specified).
 
 ### SCHEMA STRUCTURE:
-{
-        "report_metadata": {"date": "string", "source_count": "number"},
-  "market_indicators": {
-            "price_ny_ice": {"value": "number", "change_pct": "number"},
-    "internal_price_colombia": {"value": "number", "currency": "string"}
-  },
-  "logistics_alerts": [{
-            "port": "string", "status": "critical|stable|warning", "issue": "string"}],
-  "production_updates": [{"country": "string", "forecast_change": "string"}],
+{{
+  "report_metadata": {{"date": "string", "source_count": "number"}},
+  "market_indicators": {{
+    "price_ny_ice": {{"value": "number", "change_pct": "number"}},
+    "internal_price_colombia": {{"value": "number", "currency": "string"}}
+  }},
+  "logistics_alerts": [{{"port": "string", "status": "critical|stable|warning", "issue": "string"}}],
+  "production_updates": [{{"country": "string", "forecast_change": "string"}}],
   "trigger_alert": "boolean"
-}
+}}
+
+### MONITORED SOURCE URLS:
+{urls}
 """
     genai.configure(api_key=GEMINI_API_KEY)
     #  model = genai.GenerativeModel(
     #      model_name="gemini-3-flash",
     #      system_instruction=SYSTEM_PROMPT
     #  )
+    my_tools = [{"google_search_retrieval": {}}]
+
     model = genai.GenerativeModel(
         model_name="gemini-3-flash",
-        tools=[{"google_search": {}}],  # WŁĄCZENIE WYSZUKIWARKI
+        tools_config=my_tools,
         system_instruction=SYSTEM_PROMPT.format(urls=", ".join(urls_list)),
     )
 
-    user_prompt = f"Extract data from these sources into the defined JSON schema: {collected_data_text}"
+    user_prompt = (
+        f"Extract data from these sources into the defined JSON schema: {urls_list}"
+    )
 
     response = model.generate_content(
         user_prompt,
