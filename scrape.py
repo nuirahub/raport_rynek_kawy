@@ -155,7 +155,7 @@ Analyze the provided text/PDF inputs and extract key metrics into a strictly str
     #      model_name="gemini-3-flash",
     #      system_instruction=SYSTEM_PROMPT
     #  )
-    my_tools = [{"google_search_retrieval": {}}]
+    search_tool = types.Tool(google_search=types.GoogleSearch())
 
     model = genai.GenerativeModel(
         model_name="gemini-3-flash",

@@ -1,0 +1,6 @@
+{
+  "market_data": ["investing.com", "barchart.com", "tradingeconomics.com"],
+  "weather": ["openweathermap.org", "meteoblue.com"],
+  "logistics": ["reuters.com/business/logistics", "maritimenews.com"],
+  "fundamentals": ["ico.org", "usda.gov", "stonex.com"]
+}
