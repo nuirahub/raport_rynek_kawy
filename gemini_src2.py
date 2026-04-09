@@ -9,110 +9,117 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 
-# --- KONFIGURACJA ---
+# --- INICJALIZACJA ---
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-JINA_API_KEY = os.getenv("JINA_API_KEY")
-
-client = genai.Client(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+JINA_KEY = os.getenv("JINA_API_KEY")
 
 
-# --- MODELE DANYCH ---
+# --- STRUKTURA DANYCH (Gwarancja rzetelności) ---
 class MarketMetric(BaseModel):
-    name: str = Field(description="Nazwa parametru (np. Arabica Futures, ICE Stocks)")
-    value: str = Field(description="Aktualna wartość")
-    trend: str = Field(description="Kierunek: Bullish/Bearish/Neutral")
+    name: str = Field(description="Nazwa wskaźnika (np. Arabica Futures, Stocks)")
+    current_value: str = Field(description="Wartość z dnia dzisiejszego")
+    source_status: str = Field(description="Status weryfikacji: Verified/Corrected/New")
 
 
 class MarketReport(BaseModel):
-    executive_summary: str = Field(
-        description="Dlaczego cena się zmienia? Główne powody (drivers)."
+    narrative: str = Field(
+        description="Wyjaśnienie: dlaczego cena się zmieniła? (Drivers)"
     )
     metrics: List[MarketMetric]
-    confidence_score: float = Field(description="Ufność analizy (0.0-1.0)")
+    ground_truth_score: float = Field(
+        description="Ocena zgodności danych Jina z Google Search (0-1)"
+    )
 
 
 # --- POBIERANIE DANYCH (JINA.AI) ---
-def fetch_jina_market_info(query="coffee arabica ice futures market today 2026"):
-    """Przeszukuje sieć przez Jina.ai i zwraca skondensowaną treść Markdown."""
-    headers = {"Authorization": f"Bearer {JINA_API_KEY}"}
+def fetch_jina_data():
+    """Pobiera dane rynkowe przez Jina Search."""
+    query = "green coffee market prices arabica robusta ice stocks logistics weather today 2026"
+    headers = {"Authorization": f"Bearer {JINA_KEY}"}
     url = f"https://s.jina.ai/{query}"
+
+    print("-> Krok 1: Pobieranie surowych danych z Jina.ai...")
     try:
-        response = requests.get(url, headers=headers, timeout=30)
+        response = requests.get(url, headers=headers, timeout=20)
         response.raise_for_status()
         return response.text
     except Exception as e:
-        return f"Błąd Jina.ai: {str(e)}"
+        return f"Błąd Jina: {e}"
 
 
-# --- ANALIZA Z GEMINI 2.5 FLASH ---
-def analyze_with_thinking_and_search(raw_context):
-    """Analizuje dane, używa Google Search do weryfikacji i zwraca JSON."""
+# --- ANALIZA I WERYFIKACJA (GEMINI 2.5 FLASH) ---
+def run_intelligent_audit(raw_context):
+    """Analizuje dane, weryfikuje w Google Search i buduje raport."""
 
+    # Schemat JSON przekazany jako tekst (aby uniknąć błędu Tool/JSON Mode Conflict)
     schema_text = json.dumps(MarketReport.model_json_schema(), indent=2)
 
     prompt = f"""
-    ZADANIE: Wygeneruj rzetelny raport rynkowy kawy zielonej.
-    KONTEKST Z JINA.AI:
+    ZADANIE: Wygeneruj rzetelny raport rynkowy na dzień 9 kwietnia 2026.
+    
+    WEJŚCIE (DANE Z JINA.AI):
     {raw_context}
-
-    INSTRUKCJE:
-    1. Użyj narzędzia Google Search, aby zweryfikować powyższe ceny i zapasy (szukaj danych z kwietnia 2026).
-    2. Znajdź przyczyny zmian (tzw. drivers/narrative).
-    3. Zwróć wynik WYŁĄCZNIE jako czysty JSON według schematu:
+    
+    INSTRUKCJE WERYFIKACJI (Ground Truth):
+    1. Użyj narzędzia Google Search, aby sprawdzić, czy ceny i zapasy z Jina.ai są aktualne na dzień dzisiejszy.
+    2. Jeśli dane z Jina są stare (np. z 2025 roku), zastąp je danymi z wyszukiwarki.
+    3. Wyjaśnij 'drivers' - np. czy przyczyną jest susza w Brazylii czy problemy w portach Wietnamu.
+    4. Odpowiedz WYŁĄCZNIE w formacie JSON wg schematu:
     {schema_text}
     """
 
-    # Konfiguracja narzędzi (Search) i procesu myślowego (Thinking)
+    # Konfiguracja narzędzia Search i Thinking
     search_tool = types.Tool(google_search=types.GoogleSearch())
 
     config = types.GenerateContentConfig(
         tools=[search_tool],
         thinking_config=types.ThinkingConfig(include_thoughts=True),
-        temperature=1.0,  # Zalecane przy korzystaniu z grounding
+        temperature=1.0,
     )
 
+    print("-> Krok 2: Proces myślowy AI + Weryfikacja Google Search...")
     try:
         response = client.models.generate_content(
             model="gemini-2.5-flash", contents=prompt, config=config
         )
 
-        # Bezpieczne wyciąganie myśli i tekstu (Poprawiony AttributeError)
-        ai_final_text = ""
-        candidate = response.candidates
+        # KLUCZOWA NAPRAWA: response.candidates
+        if not response.candidates:
+            return "Błąd: Model nie zwrócił żadnej odpowiedzi."
 
-        for part in candidate.content.parts:
+        final_text = ""
+        # Iterujemy po częściach, aby oddzielić Thinking od JSON
+        for part in response.candidates.content.parts:
             if part.thought:
-                print(f"--- PROCES MYŚLOWY AI ---\n{part.text}\n")
+                print(f"\n:\n{part.text}\n")
             if part.text:
-                ai_final_text += part.text
+                final_text += part.text
 
-        return ai_final_text
+        return final_text
 
     except Exception as e:
-        return f"Błąd Gemini API: {str(e)}"
+        return f"Błąd API Gemini: {str(e)}"
 
 
-# --- GŁÓWNA LOGIKA ---
-def run_market_audit():
-    print("1. Pobieranie danych z Jina.ai (Ground Truth Layer)...")
-    context = fetch_jina_market_info()
-
-    print("2. Analiza Gemini (Thinking + Google Search Verification)...")
-    raw_output = analyze_with_thinking_and_search(context)
-
-    # Oczyszczanie tekstu z ewentualnych znaczników ```json... ```
-    clean_json = re.sub(r"```json\s*|```", "", raw_output).strip()
-
-    try:
-        validated_report = MarketReport.model_validate_json(clean_json)
-        print("\n=== FINALNY RAPORT RYNKOWY (JSON) ===\n")
-        print(validated_report.model_dump_json(indent=2))
-        return validated_report
-    except Exception as e:
-        print(f"Błąd walidacji JSON: {e}")
-        print(f"Surowy tekst od AI: {raw_output}")
-
-
+# --- URUCHOMIENIE ---
 if __name__ == "__main__":
-    run_market_audit()
+    # 1. Dane bazowe
+    context = fetch_jina_data()
+
+    # 2. Inteligentny Audyt
+    ai_raw_output = run_intelligent_audit(context)
+
+    # 3. Czyszczenie JSON (model czasem dodaje ```json... ```)
+    clean_json = re.sub(r"```json\s*|```", "", ai_raw_output).strip()
+
+    # 4. Finalna walidacja i wyświetlenie
+    try:
+        report = MarketReport.model_validate_json(clean_json)
+        print("!" * 60)
+        print("FINALNY, ZWERYFIKOWANY RAPORT RYNKOWY (JSON)")
+        print("!" * 60)
+        print(report.model_dump_json(indent=2))
+    except Exception as e:
+        print(f"\nBłąd walidacji danych: {e}")
+        print(f"Surowa treść od AI:\n{ai_raw_output}")
