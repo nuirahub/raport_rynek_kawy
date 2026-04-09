@@ -1,18 +1,6 @@
 {
-  "goverment_and_orgs": {
-    "description": "Oficjalne raporty rządowe i organizacyjne",
-    "pdf": [
-      "https://www.cecafe.com.br/en/publications/monthly-exports-report/",
-      "https://www.fas.usda.gov/data/commodities/coffee"
-    ],
-    "html": ["https://www.vicofa.org.vn/en-us/"]
-  },
-  "market_data": {
-    "description": "Notowania giełdowe i analizy finansowe",
-    "pdf": [
-      "https://www.cecafe.com.br/en/publications/monthly-exports-report/",
-      "https://www.fas.usda.gov/data/commodities/coffee"
-    ],
-    "html": ["https://www.vicofa.org.vn/en-us/"]
-  }
+  "market_data": ["investing.com", "barchart.com", "tradingeconomics.com"],
+  "weather": ["openweathermap.org", "meteoblue.com"],
+  "logistics": ["reuters.com/business/logistics", "maritimenews.com"],
+  "fundamentals": ["ico.org", "usda.gov", "stonex.com"]
 }

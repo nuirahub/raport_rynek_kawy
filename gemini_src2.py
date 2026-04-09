@@ -1,125 +1,121 @@
-import json
 import os
-import re
-from typing import List
-
+import json
 import requests
-from dotenv import load_dotenv
+import re
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
+from typing import List, Optional
+from dotenv import load_dotenv
 
-# --- INICJALIZACJA ---
+# --- KONFIGURACJA ---
 load_dotenv()
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-JINA_KEY = os.getenv("JINA_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+JINA_API_KEY = os.getenv("JINA_API_KEY")
+client = genai.Client(api_key=GEMINI_API_KEY)
 
-
-# --- STRUKTURA DANYCH (Gwarancja rzetelności) ---
+# --- MODELE DANYCH ---
 class MarketMetric(BaseModel):
-    name: str = Field(description="Nazwa wskaźnika (np. Arabica Futures, Stocks)")
-    current_value: str = Field(description="Wartość z dnia dzisiejszego")
-    source_status: str = Field(description="Status weryfikacji: Verified/Corrected/New")
+    name: str = Field(description="Nazwa parametru (np. KC Arabica Futures)")
+    value: str = Field(description="Dzisiejsza zweryfikowana wartość")
+    change_vs_yesterday: str = Field(description="Różnica względem danych historycznych")
 
-
-class MarketReport(BaseModel):
-    narrative: str = Field(
-        description="Wyjaśnienie: dlaczego cena się zmieniła? (Drivers)"
-    )
+class CoffeeAuditReport(BaseModel):
+    narrative: str = Field(description="Główny powód zmiany ceny (driver)")
     metrics: List[MarketMetric]
-    ground_truth_score: float = Field(
-        description="Ocena zgodności danych Jina z Google Search (0-1)"
-    )
+    search_verification: str = Field(description="Co model znalazł w Google Search, czego nie było w Jina?")
 
+# --- MODUŁY POMOCNICZE ---
+def load_sources():
+    with open('sources.json', 'r', encoding='utf-8') as f:
+        return json.load(f)
 
-# --- POBIERANIE DANYCH (JINA.AI) ---
-def fetch_jina_data():
-    """Pobiera dane rynkowe przez Jina Search."""
-    query = "green coffee market prices arabica robusta ice stocks logistics weather today 2026"
-    headers = {"Authorization": f"Bearer {JINA_KEY}"}
+def fetch_jina_data(sources_dict):
+    # Budujemy zapytanie na podstawie domen z sources.json
+    all_domains = [domain for group in sources_dict.values() for domain in group]
+    query = f"coffee green market ice prices and stocks April 2026 sources: {', '.join(all_domains)}"
+    
+    headers = {"Authorization": f"Bearer {JINA_API_KEY}"}
     url = f"https://s.jina.ai/{query}"
+    print("-> Pobieranie danych z Jina.ai (Ground Truth Layer)...")
+    res = requests.get(url, headers=headers, timeout=30)
+    return res.text
 
-    print("-> Krok 1: Pobieranie surowych danych z Jina.ai...")
-    try:
-        response = requests.get(url, headers=headers, timeout=20)
-        response.raise_for_status()
-        return response.text
-    except Exception as e:
-        return f"Błąd Jina: {e}"
-
-
-# --- ANALIZA I WERYFIKACJA (GEMINI 2.5 FLASH) ---
-def run_intelligent_audit(raw_context):
-    """Analizuje dane, weryfikuje w Google Search i buduje raport."""
-
-    # Schemat JSON przekazany jako tekst (aby uniknąć błędu Tool/JSON Mode Conflict)
-    schema_text = json.dumps(MarketReport.model_json_schema(), indent=2)
-
+# --- ANALIZA Z GEMINI (POPRAWIONA STRUKTURA) ---
+def analyze_and_ground(raw_data):
+    schema_text = json.dumps(CoffeeAuditReport.model_json_schema(), indent=2)
+    
     prompt = f"""
-    ZADANIE: Wygeneruj rzetelny raport rynkowy na dzień 9 kwietnia 2026.
+    DZISIEJSZA DATA: 9 kwietnia 2026.
+    ZADANIE: Stwórz raport rynku kawy zielonej.
     
-    WEJŚCIE (DANE Z JINA.AI):
-    {raw_context}
+    DANE WEJŚCIOWE (Z JINA.AI):
+    {raw_data}
     
-    INSTRUKCJE WERYFIKACJI (Ground Truth):
-    1. Użyj narzędzia Google Search, aby sprawdzić, czy ceny i zapasy z Jina.ai są aktualne na dzień dzisiejszy.
-    2. Jeśli dane z Jina są stare (np. z 2025 roku), zastąp je danymi z wyszukiwarki.
-    3. Wyjaśnij 'drivers' - np. czy przyczyną jest susza w Brazylii czy problemy w portach Wietnamu.
-    4. Odpowiedz WYŁĄCZNIE w formacie JSON wg schematu:
+    INSTRUKCJE WERYFIKACJI:
+    1. Użyj narzędzia Google Search, aby sprawdzić czy ceny i zapasy są aktualne na dziś (kwiecień 2026).
+    2. Znajdź przyczyny (drivers) zmian (np. raporty StoneX o nadwyżce produkcji).
+    3. Odpowiedz WYŁĄCZNIE czystym kodem JSON zgodnym ze schematem:
     {schema_text}
     """
 
-    # Konfiguracja narzędzia Search i Thinking
-    search_tool = types.Tool(google_search=types.GoogleSearch())
-
     config = types.GenerateContentConfig(
-        tools=[search_tool],
+        tools=,
         thinking_config=types.ThinkingConfig(include_thoughts=True),
-        temperature=1.0,
+        temperature=1.0
     )
 
-    print("-> Krok 2: Proces myślowy AI + Weryfikacja Google Search...")
+    print("-> Analiza Gemini 2.5 Flash (Thinking + Google Search Verification)...")
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash", contents=prompt, config=config
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=config
         )
 
-        # KLUCZOWA NAPRAWA: response.candidates
+        # BEZPIECZNE WYCIĄGANIE TREŚCI - Używamy candidates
         if not response.candidates:
-            return "Błąd: Model nie zwrócił żadnej odpowiedzi."
+            return "Error: Brak odpowiedzi."
 
         final_text = ""
-        # Iterujemy po częściach, aby oddzielić Thinking od JSON
+        # Przechodzimy przez części: myśli (thought) są drukowane, tekst (JSON) zbierany
+        # Używamy poprawnego indeksowania candidates dla SDK google-genai
         for part in response.candidates.content.parts:
             if part.thought:
-                print(f"\n:\n{part.text}\n")
+                print(f"\n--- LOGIKA MODELU ---\n{part.text}\n")
             if part.text:
                 final_text += part.text
-
+        
         return final_text
 
     except Exception as e:
-        return f"Błąd API Gemini: {str(e)}"
-
+        return f"Błąd krytyczny API: {str(e)}"
 
 # --- URUCHOMIENIE ---
 if __name__ == "__main__":
-    # 1. Dane bazowe
-    context = fetch_jina_data()
-
-    # 2. Inteligentny Audyt
-    ai_raw_output = run_intelligent_audit(context)
-
-    # 3. Czyszczenie JSON (model czasem dodaje ```json... ```)
-    clean_json = re.sub(r"```json\s*|```", "", ai_raw_output).strip()
-
-    # 4. Finalna walidacja i wyświetlenie
+    # 1. Wczytaj zaufane źródła
+    src_config = load_sources()
+    
+    # 2. Pobierz dane przez Jina.ai
+    context = fetch_jina_data(src_config)
+    
+    # 3. Analiza i audyt AI
+    ai_raw_output = analyze_and_ground(context)
+    
+    # 4. Oczyszczanie i walidacja JSON
+    clean_json = re.sub(r'```json\s*|```', '', ai_raw_output).strip()
+    
     try:
-        report = MarketReport.model_validate_json(clean_json)
-        print("!" * 60)
-        print("FINALNY, ZWERYFIKOWANY RAPORT RYNKOWY (JSON)")
-        print("!" * 60)
-        print(report.model_dump_json(indent=2))
+        final_report = CoffeeAuditReport.model_validate_json(clean_json)
+        print("\n" + "="*60)
+        print("ZWERYFIKOWANY RAPORT RYNKOWY (GOLD DATA)")
+        print("="*60)
+        print(final_report.model_dump_json(indent=2))
+        
+        # Zapisz jako dzisiejszy raport do przyszłego porównania
+        with open('yesterday_report.json', 'w', encoding='utf-8') as f:
+            f.write(final_report.model_dump_json(indent=2))
+            
     except Exception as e:
-        print(f"\nBłąd walidacji danych: {e}")
-        print(f"Surowa treść od AI:\n{ai_raw_output}")
+        print(f"\nBŁĄD WALIDACJI: {e}")
+        print(f"Surowa odpowiedź modelu:\n{ai_raw_output}")
